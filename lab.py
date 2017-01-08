@@ -280,9 +280,7 @@ weights_hidden_layer = tf.Variable(tf.truncated_normal([features_count, hidden_l
 biases_hidden_layer = tf.Variable(tf.zeros(hidden_layer_count))
 
 weights = tf.Variable(tf.truncated_normal([hidden_layer_count, labels_count]))
-#weights = tf.Variable(tf.truncated_normal([features_count, labels_count]))
 biases = tf.Variable(tf.zeros(labels_count))
-
 
 ### DON'T MODIFY ANYTHING BELOW ###
 
@@ -299,7 +297,6 @@ assert labels._shape  == None or (    labels._shape.dims[0].value is None and   
 assert weights_hidden_layer._variable._shape == (784, 1024), 'The shape of weights is incorrect'
 assert biases_hidden_layer._variable._shape == (1024), 'The shape of biases is incorrect'
 assert weights._variable._shape == (1024, 10), 'The shape of weights is incorrect'
-#assert weights._variable._shape == (784, 10), 'The shape of weights is incorrect'
 assert biases._variable._shape == (10), 'The shape of biases is incorrect'
 
 assert features._dtype == tf.float32, 'features must be type float32'
@@ -319,8 +316,8 @@ tmp_relu = tf.nn.relu(tmp)
 #logits = tf.matmul(tmp_relu, weights) + biases
 logits = tf.add(tf.matmul(tmp_relu, weights), biases)
 
-#<<JC>> prediction = tf.nn.softmax(logits)
-#<<JC>> 
+prediction = tf.nn.softmax(logits)
+
 #<<JC>> # Cross entropy
 #<<JC>> cross_entropy = -tf.reduce_sum(labels * tf.log(prediction), reduction_indices=1)
 #<<JC>> 
@@ -328,32 +325,6 @@ logits = tf.add(tf.matmul(tmp_relu, weights), biases)
 #<<JC>> loss = tf.reduce_mean(cross_entropy)
 
 loss = tf.nn.softmax_cross_entropy_with_logits(logits, labels)
-
-# Create an operation that initializes all variables
-init = tf.initialize_all_variables()
-
-# Test Cases
-with tf.Session() as session:
-    session.run(init)
-    train_loss = session.run(loss, feed_dict=train_feed_dict)
-    valid_loss = session.run(loss, feed_dict=valid_feed_dict)
-    test_loss = session.run(loss, feed_dict=test_feed_dict)
-    biases_data = session.run(biases)
-    #print("tmp = ", session.run(tmp, feed_dict=train_feed_dict))
-    print("tmp_relu = ", session.run(tmp_relu, feed_dict=train_feed_dict))
-    print("logits = ", session.run(logits, feed_dict=train_feed_dict))
-    #print("prediction = ", session.run(prediction, feed_dict=train_feed_dict))
-    print("labels = ", session.run(labels, feed_dict=train_feed_dict))
-    #print("cross_entropy = ", session.run(cross_entropy, feed_dict=train_feed_dict))
-    print("loss = ", session.run(loss, feed_dict=train_feed_dict))
-
-assert not np.count_nonzero(biases_data), 'biases must be zeros'
-print("train/valid/test_loss = ", train_loss, valid_loss, test_loss);
-
-print('Tests Passed!')
-
-
-# In[10]:
 
 # Determine if the predictions are correct
 is_correct_prediction = tf.equal(tf.argmax(prediction, 1), tf.argmax(labels, 1))
@@ -363,64 +334,29 @@ accuracy = tf.reduce_mean(tf.cast(is_correct_prediction, tf.float32))
 print('Accuracy function created.')
 
 
-# <img src="image/learn_rate_tune.png" style="height: 60%;width: 60%">
-# ## Problem 3
-# Below are 3 parameter configurations for training the neural network. In each configuration, one of the parameters has multiple options. For each configuration, choose the option that gives the best acccuracy.
-# 
-# Parameter configurations:
-# 
-# Configuration 1
-# * **Epochs:** 1
-# * **Batch Size:**
-#   * 2000
-#   * 1000
-#   * 500
-#   * 300
-#   * 50
-# * **Learning Rate:** 0.01
-# 
-# Configuration 2
-# * **Epochs:** 1
-# * **Batch Size:** 100
-# * **Learning Rate:**
-#   * 0.8
-#   * 0.5
-#   * 0.1
-#   * 0.05
-#   * 0.01
-# 
-# Configuration 3
-# * **Epochs:**
-#   * 1
-#   * 2
-#   * 3
-#   * 4
-#   * 5
-# * **Batch Size:** 100
-# * **Learning Rate:** 0.2
-# 
-# The code will print out a Loss and Accuracy graph, so you can see how well the neural network performed.
-# 
-# *If you're having trouble solving problem 3, you can view the solution [here](https://github.com/udacity/CarND-TensorFlow-Lab/blob/master/solutions.ipynb).*
 
 # In[11]:
 
 # TODO: Find the best parameters for each configuration
-epochs = 1
-batch_size = 100
-learning_rate = 0.01
+epochs = 200
+batch_size = 500
+learning_rate = 0.03
 
 
 
 ### DON'T MODIFY ANYTHING BELOW ###
 # Gradient Descent
-optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)    
+optimizer = tf.train.AdagradOptimizer(learning_rate).minimize(loss)    
+#optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)    
+
+# Create an operation that initializes all variables
+init = tf.initialize_all_variables()
 
 # The accuracy measured against the validation set
 validation_accuracy = 0.0
 
 # Measurements use for graphing loss and accuracy
-log_batch_step = 1
+log_batch_step = 50
 batches = []
 loss_batch = []
 train_acc_batch = []
@@ -428,8 +364,7 @@ valid_acc_batch = []
 
 with tf.Session() as session:
     session.run(init)
-    #<<JC>> hack batch_count = int(math.ceil(len(train_features)/batch_size))
-    batch_count = 5
+    batch_count = int(math.ceil(len(train_features)/batch_size))
 
     for epoch_i in range(epochs):
         
@@ -464,23 +399,21 @@ with tf.Session() as session:
         # Check accuracy against Validation data
         validation_accuracy = session.run(accuracy, feed_dict=valid_feed_dict)
 
-print("loss_batch = ", loss_batch)
-print("validation_accuracy = ", validation_accuracy)
+loss_plot = plt.subplot(211)
+loss_plot.set_title('Loss')
+loss_plot.plot(batches, loss_batch, 'g')
+loss_plot.set_xlim([batches[0], batches[-1]])
+acc_plot = plt.subplot(212)
+acc_plot.set_title('Accuracy')
+acc_plot.plot(batches, train_acc_batch, 'r', label='Training Accuracy')
+acc_plot.plot(batches, valid_acc_batch, 'x', label='Validation Accuracy')
+acc_plot.set_ylim([0, 1.0])
+acc_plot.set_xlim([batches[0], batches[-1]])
+acc_plot.legend(loc=4)
+plt.tight_layout()
+plt.show()
 
-#loss_plot = plt.subplot(211)
-#loss_plot.set_title('Loss')
-#loss_plot.plot(batches, loss_batch, 'g')
-#loss_plot.set_xlim([batches[0], batches[-1]])
-#acc_plot = plt.subplot(212)
-#acc_plot.set_title('Accuracy')
-#acc_plot.plot(batches, train_acc_batch, 'r', label='Training Accuracy')
-#acc_plot.plot(batches, valid_acc_batch, 'x', label='Validation Accuracy')
-#acc_plot.set_ylim([0, 1.0])
-#acc_plot.set_xlim([batches[0], batches[-1]])
-#acc_plot.legend(loc=4)
-#plt.tight_layout()
-#plt.show()
-
+print('Training accuracy at {}'.format(training_accuracy))
 print('Validation accuracy at {}'.format(validation_accuracy))
 
 
