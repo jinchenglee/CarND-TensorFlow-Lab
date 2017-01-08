@@ -106,12 +106,10 @@ print('Accuracy function created.')
 
 # In[11]:
 # TODO: Find the best parameters for each configuration
-epochs = 1
-batch_size = 1000
-learning_rate = 0.01
+epochs = 100
  
-for batch_size in [64,128,256,512,1024]:
-    for learning_rate in [0.001, 0.003, 0.01, 0.03, 0.1]: 
+for batch_size in [128,256,512]:
+    for learning_rate in [0.0007,0.001,0.003]: 
         
         ### DON'T MODIFY ANYTHING BELOW ###
         # Gradient Descent
@@ -192,12 +190,12 @@ for batch_size in [64,128,256,512,1024]:
         #acc_plot.legend(loc=4)
         #plt.tight_layout()
         #plt.show()
-        # 
+         
         #print('Training accuracy at {}'.format(training_accuracy))
         #print('Validation accuracy at {}'.format(validation_accuracy))
         #assert test_accuracy >= 0.80, 'Test accuracy at {}, should be equal to or greater than 0.80'.format(test_accuracy)
         #print('Nice Job! Test Accuracy is {}'.format(test_accuracy))
 
-        print('batch_size {}, lr {}, train_accu {}, valid_accu {}, test_accu {}'.format(batch_size, learning_rate, training_accuracy, validation_accuracy, test_accuracy))
+        print("batch_size %4d, lr %f, train_accu %4.2f, valid_accu %4.2f, test_accu %4.2f" % (batch_size, learning_rate, training_accuracy, validation_accuracy, test_accuracy))
 
 
