@@ -32,6 +32,10 @@ labels_count = 10
 
 hidden_layer_count = 1024
 
+# Drop out probability
+keep_prob = tf.placeholder(tf.float32)
+TRAIN_PROB = 0.5
+
 # TODO: Set the features and labels tensors
 features = tf.placeholder(tf.float32, [None, features_count])
 labels = tf.placeholder(tf.float32, [None, labels_count])
@@ -64,21 +68,25 @@ assert features._dtype == tf.float32, 'features must be type float32'
 assert labels._dtype == tf.float32, 'labels must be type float32'
 
 # Feed dicts for training, validation, and test session
-train_feed_dict = {features: train_features, labels: train_labels}
-valid_feed_dict = {features: valid_features, labels: valid_labels}
-test_feed_dict = {features: test_features, labels: test_labels}
+train_feed_dict = {features: train_features, labels: train_labels, keep_prob: 1.0}
+valid_feed_dict = {features: valid_features, labels: valid_labels, keep_prob: 1.0}
+test_feed_dict = {features: test_features, labels: test_labels, keep_prob: 1.0}
 
 # Linear Function WX + b
 #tmp = tf.matmul(features, weights_hidden_layer) + biases_hidden_layer
 tmp = tf.add(tf.matmul(features, weights_hidden_layer),biases_hidden_layer)
 tmp_relu = tf.nn.relu(tmp)
+tmp_dropout = tf.nn.dropout(tmp_relu, keep_prob)
 
 # Hidden layer
-#logits = tf.matmul(tmp_relu, weights) + biases
-logits = tf.add(tf.matmul(tmp_relu, weights), biases)
+logits = tf.add(tf.matmul(tmp_dropout, weights), biases)
 
 prediction = tf.nn.softmax(logits)
 
+# Using below code instead of tf.nn.softmax_cross_entropy_with_logits() will hit
+# numerical instability issue. as prediction can be quite possible be exactly 0 after RELU, 
+# thus tf.log(0) is infinity -- causing NaN in cross_entropy etc. 
+#
 #<<JC>> # Cross entropy
 #<<JC>> cross_entropy = -tf.reduce_sum(labels * tf.log(prediction), reduction_indices=1)
 #<<JC>> 
@@ -97,97 +105,99 @@ print('Accuracy function created.')
 
 
 # In[11]:
-
 # TODO: Find the best parameters for each configuration
-epochs = 200
+epochs = 1
 batch_size = 1000
-learning_rate = 0.03
-
-
-
-### DON'T MODIFY ANYTHING BELOW ###
-# Gradient Descent
-optimizer = tf.train.AdagradOptimizer(learning_rate).minimize(loss)    
-#optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)    
-
-# Create an operation that initializes all variables
-init = tf.initialize_all_variables()
-
-# Saver of the network
-save_file = 'model.ckpt'
-saver = tf.train.Saver()
-
-
-# The accuracy measured against the validation set
-validation_accuracy = 0.0
-
-# Measurements use for graphing loss and accuracy
-log_batch_step = 50
-batches = []
-loss_batch = []
-train_acc_batch = []
-valid_acc_batch = []
-
-with tf.Session() as session:
-    session.run(init)
-    batch_count = int(math.ceil(len(train_features)/batch_size))
-
-    for epoch_i in range(epochs):
+learning_rate = 0.01
+ 
+for batch_size in [64,128,256,512,1024]:
+    for learning_rate in [0.001, 0.003, 0.01, 0.03, 0.1]: 
         
-        # Progress bar
-        batches_pbar = tqdm(range(batch_count), desc='Epoch {:>2}/{}'.format(epoch_i+1, epochs), unit='batches')
+        ### DON'T MODIFY ANYTHING BELOW ###
+        # Gradient Descent
+        optimizer = tf.train.AdagradOptimizer(learning_rate).minimize(loss)    
+        #optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)    
         
-        # The training cycle
-        for batch_i in batches_pbar:
-            # Get a batch of training features and labels
-            batch_start = batch_i*batch_size
-            batch_features = train_features[batch_start:batch_start + batch_size]
-            batch_labels = train_labels[batch_start:batch_start + batch_size]
-
-            # Run optimizer and get loss
-            _, l = session.run(
-                [optimizer, loss],
-                feed_dict={features: batch_features, labels: batch_labels})
-
-            # Log every 50 batches
-            if not batch_i % log_batch_step:
-                # Calculate Training and Validation accuracy
-                training_accuracy = session.run(accuracy, feed_dict=train_feed_dict)
+        # Create an operation that initializes all variables
+        init = tf.initialize_all_variables()
+        
+        # Saver of the network
+        save_file = 'model.ckpt'
+        saver = tf.train.Saver()
+        
+        
+        # The accuracy measured against the validation set
+        validation_accuracy = 0.0
+        
+        # Measurements use for graphing loss and accuracy
+        log_batch_step = 250
+        batches = []
+        loss_batch = []
+        train_acc_batch = []
+        valid_acc_batch = []
+        
+        with tf.Session() as session:
+            session.run(init)
+            batch_count = int(math.ceil(len(train_features)/batch_size))
+        
+            for epoch_i in range(epochs):
+                
+                # Progress bar
+                batches_pbar = tqdm(range(batch_count), desc='Epoch {:>2}/{}'.format(epoch_i+1, epochs), unit='batches')
+                
+                # The training cycle
+                for batch_i in batches_pbar:
+                    # Get a batch of training features and labels
+                    batch_start = batch_i*batch_size
+                    batch_features = train_features[batch_start:batch_start + batch_size]
+                    batch_labels = train_labels[batch_start:batch_start + batch_size]
+        
+                    # Run optimizer and get loss
+                    _, l = session.run(
+                        [optimizer, loss],
+                        feed_dict={features: batch_features, labels: batch_labels, keep_prob:TRAIN_PROB})
+        
+                    # Log every 50 batches
+                    if not batch_i % log_batch_step:
+                        # Calculate Training and Validation accuracy
+                        training_accuracy = session.run(accuracy, feed_dict=train_feed_dict)
+                        validation_accuracy = session.run(accuracy, feed_dict=valid_feed_dict)
+        
+                        # Log batches
+                        previous_batch = batches[-1] if batches else 0
+                        batches.append(log_batch_step + previous_batch)
+                        loss_batch.append(l)
+                        train_acc_batch.append(training_accuracy)
+                        valid_acc_batch.append(validation_accuracy)
+        
+                # Check accuracy against Validation data
                 validation_accuracy = session.run(accuracy, feed_dict=valid_feed_dict)
+        
+                # Check accuracy against Test data
+                test_accuracy = session.run(accuracy, feed_dict=test_feed_dict)
+          
+            # Save the network
+            saver.save(session, save_file)
+        
+        #loss_plot = plt.subplot(211)
+        #loss_plot.set_title('Loss')
+        #loss_plot.plot(batches, loss_batch, 'g')
+        #loss_plot.set_xlim([batches[0], batches[-1]])
+        #acc_plot = plt.subplot(212)
+        #acc_plot.set_title('Accuracy')
+        #acc_plot.plot(batches, train_acc_batch, 'r', label='Training Accuracy')
+        #acc_plot.plot(batches, valid_acc_batch, 'x', label='Validation Accuracy')
+        #acc_plot.set_ylim([0, 1.0])
+        #acc_plot.set_xlim([batches[0], batches[-1]])
+        #acc_plot.legend(loc=4)
+        #plt.tight_layout()
+        #plt.show()
+        # 
+        #print('Training accuracy at {}'.format(training_accuracy))
+        #print('Validation accuracy at {}'.format(validation_accuracy))
+        #assert test_accuracy >= 0.80, 'Test accuracy at {}, should be equal to or greater than 0.80'.format(test_accuracy)
+        #print('Nice Job! Test Accuracy is {}'.format(test_accuracy))
 
-                # Log batches
-                previous_batch = batches[-1] if batches else 0
-                batches.append(log_batch_step + previous_batch)
-                loss_batch.append(l)
-                train_acc_batch.append(training_accuracy)
-                valid_acc_batch.append(validation_accuracy)
-
-        # Check accuracy against Validation data
-        validation_accuracy = session.run(accuracy, feed_dict=valid_feed_dict)
-
-        # Check accuracy against Test data
-        test_accuracy = session.run(accuracy, feed_dict=test_feed_dict)
-  
-    # Save the network
-    saver.save(session, save_file)
-
-loss_plot = plt.subplot(211)
-loss_plot.set_title('Loss')
-loss_plot.plot(batches, loss_batch, 'g')
-loss_plot.set_xlim([batches[0], batches[-1]])
-acc_plot = plt.subplot(212)
-acc_plot.set_title('Accuracy')
-acc_plot.plot(batches, train_acc_batch, 'r', label='Training Accuracy')
-acc_plot.plot(batches, valid_acc_batch, 'x', label='Validation Accuracy')
-acc_plot.set_ylim([0, 1.0])
-acc_plot.set_xlim([batches[0], batches[-1]])
-acc_plot.legend(loc=4)
-plt.tight_layout()
-plt.show()
-
-print('Training accuracy at {}'.format(training_accuracy))
-print('Validation accuracy at {}'.format(validation_accuracy))
-assert test_accuracy >= 0.80, 'Test accuracy at {}, should be equal to or greater than 0.80'.format(test_accuracy)
-print('Nice Job! Test Accuracy is {}'.format(test_accuracy))
+        print('batch_size {}, lr {}, train_accu {}, valid_accu {}, test_accu {}'.format(batch_size, learning_rate, training_accuracy, validation_accuracy, test_accuracy))
 
 
